@@ -152,6 +152,33 @@ class TestProgressFeedback:
         assert app._busy is False
 
 
+class TestStepGuidance:
+    def test_lists_the_setup_steps_in_order(self, app) -> None:
+        text = app._instructions.cget("text").upper()
+        for step in ("SIM", "BATTERY", "POWER", "WI-FI", "DATA SYNC CABLE", "PRESS START"):
+            assert step in text
+
+
+class TestRestoreFlow:
+    def test_restore_runs_controller_in_restore_mode(self, app) -> None:
+        app._confirm.select()
+        app._start_restore()
+        pump(app)
+        assert app.controller.restore is True
+        assert "restored" in app._status.cget("text").lower()
+
+    def test_restore_still_needs_the_disclaimer(self, app) -> None:
+        app._start_restore()
+        assert app._busy is False
+        assert app.controller.ran == 0
+
+    def test_restore_button_reenabled_after_finish(self, app) -> None:
+        app._confirm.select()
+        app._start_restore()
+        pump(app)
+        assert str(app._btn_restore.cget("state")) == "normal"
+
+
 class TestUnexpectedError:
     def test_unexpected_error_surfaces_log_path(self, app, monkeypatch) -> None:
         """#14/#22: raw exception text is replaced by friendly copy + log path."""

@@ -48,6 +48,7 @@ class BypassController:
         on_step: Callable[[Step], None] | None = None,
         on_detail: Callable[[str], None] | None = None,
         cancel: threading.Event | None = None,
+        restore: bool = False,
     ) -> bool:
         def notify(step: Step) -> None:
             if on_step:
@@ -99,7 +100,12 @@ class BypassController:
                 else:
                     detail(f"Detected: device on {self.detected_port}")
                 check()
-                self.serial.write_battery_bypass(port)
+                writer = (
+                    self.serial.write_battery_restore
+                    if restore
+                    else self.serial.write_battery_bypass
+                )
+                writer(port)
             except BypassError:
                 raise
             except Exception as exc:

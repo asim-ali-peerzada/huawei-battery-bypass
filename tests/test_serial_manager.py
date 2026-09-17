@@ -82,8 +82,14 @@ class TestFindPort:
     def test_raises_when_no_huawei_port(self) -> None:
         manager = SerialManager()
         with mock.patch("core.serial_manager.list_ports.comports", return_value=[]):
-            with pytest.raises(NoSerialPortError):
+            with pytest.raises(NoSerialPortError) as exc_info:
                 manager.find_port(attempts=1)
+        # "Not found" alone is useless here: on most Linux hosts the port is
+        # missing because the option driver never claimed the device.
+        message = str(exc_info.value).lower()
+        assert "ttyusb" in message
+        assert "modprobe option" in message
+        assert "new_id" in message
 
     def test_polls_until_port_appears(self) -> None:
         manager = SerialManager()
@@ -222,3 +228,25 @@ class TestWriteBypass:
             with pytest.raises(OSError):
                 manager.write_battery_bypass("/dev/ttyUSB0")
         fake.close.assert_called_once()
+
+
+class TestWriteRestore:
+    """Revert path: NV 50364 must be zeroed to bring the battery back."""
+
+    def test_sends_zero_payload_after_handshake(self) -> None:
+        manager = SerialManager()
+        fake = mock.Mock()
+        fake.read_until.return_value = b"OK\r\n"
+        with mock.patch("serial.Serial", return_value=fake):
+            manager.write_battery_restore("/dev/ttyUSB0")
+        writes = [call.args[0] for call in fake.write.call_args_list]
+        assert writes[0] == b"AT\r\n"
+        assert writes[1] == b"AT^NVWREX=50364,0,4,00 00 00 00\r\n"
+        fake.close.assert_called_once()
+
+    def test_open_error_still_translated(self) -> None:
+        manager = SerialManager()
+        exc = serial.SerialException("Port is busy or resource is locked")
+        with mock.patch("core.serial_manager._open", side_effect=exc):
+            with pytest.raises(ModemManagerError):
+                manager.write_battery_restore("/dev/ttyUSB0")

@@ -14,6 +14,8 @@ All notable changes are documented here, following
 - Huawei serial port auto-discovery (vendor `0x12D1`, PC UI preferred).
 - `AT^NVWREX=50364,0,4,01 00 00 00` battery-bypass write with Datalock error
   reporting.
+- Restore/revert option: `AT^NVWREX=50364,0,4,00 00 00 00` writes the battery
+  back to normal operation, run from a second "Restore Battery" button.
 - ZeroCell `customtkinter` desktop app: Idle → Working → Success/Error states,
   worker-thread execution so the UI never freezes.
 - File logging (rotating, never logs tokens or serial payloads).
@@ -38,6 +40,8 @@ All notable changes are documented here, following
   claiming verified success; the progress bar no longer sits frozen during the
   serial scan and only fills fully on real success.
 - Window title includes the version; error copy includes the log path.
+- The setup steps (SIM → battery → power on → Wi-Fi → data cable → press start)
+  are listed on the main screen instead of one compressed footer line.
 
 ### Fixed
 
@@ -46,3 +50,5 @@ All notable changes are documented here, following
   firmware Datalock.
 - `find_port` refuses to guess when multiple Huawei ports are present and none
   advertises PC UI.
+- A missing `/dev/ttyUSB*` port now reports the real fix (`modprobe option` +
+  registering the USB id) instead of just "device not found".

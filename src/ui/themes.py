@@ -34,7 +34,7 @@ class Theme:
     label_font: FontSpec = (FONT_MONO, 14, "bold")
     header: str = "ZEROCELL :: AT MODEM BYPASS"
     idle_status: str = "$ READY"
-    idle_detail: str = "> connect device via data-sync cable · power on · press RUN"
+    idle_detail: str = "> run the steps below, then press start"
 
 
 THEME = Theme(

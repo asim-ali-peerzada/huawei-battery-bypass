@@ -145,3 +145,22 @@ class TestSubStepDetail:
         assert controller.detected_port == "/dev/ttyUSB0"
         assert "PC UI" in controller.detected_description
         assert any("Detected:" in d for d in details)
+
+
+class TestRestoreFlow:
+    """Reversing an existing bypass must write the zero payload, not the one."""
+
+    def test_restore_run_writes_revert_payload(self, controller, fake_serial) -> None:
+        assert controller.run(restore=True) is True
+        assert fake_serial.restored is True
+        assert fake_serial.written is False
+
+    def test_restore_run_still_walks_all_steps(self, controller) -> None:
+        events: list[Step] = []
+        controller.run(on_step=events.append, restore=True)
+        assert events == [Step.CONNECTING, Step.SWITCHING, Step.APPLYING]
+
+    def test_default_run_does_not_restore(self, controller, fake_serial) -> None:
+        controller.run()
+        assert fake_serial.written is True
+        assert fake_serial.restored is False

@@ -25,8 +25,27 @@ from utils.version import __version__
 logger = logging.getLogger("zerocell.ui")
 
 LABEL_START = "Start Battery Bypass"
+LABEL_RESTORE = "Restore Battery (Revert Bypass)"
 LABEL_WORKING = "Working..."
+LABEL_RESTORING = "Restoring..."
+DETAIL_APPLIED = (
+    "Command accepted. Now verify on the device: unplug it, remove the "
+    "battery, then plug into a wall charger. It should power on without "
+    "the battery."
+)
+DETAIL_RESTORED = (
+    "Command accepted. Now verify on the device: reinsert the battery and "
+    "power it on normally. It should charge and run off the battery again."
+)
 DISCLAIMER_TEXT = "I understand this writes firmware; it may not work."
+STEPS_TEXT = (
+    "1 · INSERT SIM CARD\n"
+    "2 · INSERT BATTERY\n"
+    "3 · POWER THE DEVICE ON\n"
+    "4 · CONNECT THIS COMPUTER TO THE DEVICE WI-FI\n"
+    "5 · CONNECT THE DATA SYNC CABLE\n"
+    "6 · PRESS START BATTERY BYPASS"
+)
 CONTENT_WIDTH = 480
 PAD = round(CONTENT_WIDTH * 0.03)  # ~3% gutter each side; one source of truth
 WRAP_FULL = CONTENT_WIDTH - 2 * PAD
@@ -43,6 +62,7 @@ class ZeroCellApp(ctk.CTk):
         self._run_callback = run_callback
         self._busy = False
         self._closed = False
+        self._restore = False
         self._cancel = threading.Event()
         self._events: queue.Queue[Step | str | tuple[str, object]] = queue.Queue()
 
@@ -73,7 +93,6 @@ class ZeroCellApp(ctk.CTk):
         t = THEME
         self.minsize(440, 560)
         self._start_text = self._heading(LABEL_START)
-        self._working_text = self._heading(LABEL_WORKING)
         self.configure(fg_color=t.bg)
         for child in self._body.winfo_children():
             child.destroy()
@@ -110,6 +129,16 @@ class ZeroCellApp(ctk.CTk):
         self._progress.set(0)
         self._progress.pack(padx=PAD, pady=(24, 16))
 
+        self._instructions = c.make_label(
+            self._body,
+            self._heading(STEPS_TEXT),
+            color=t.ink,
+            font=self._font(t.body_font),
+            wraplength=WRAP_FULL,
+            justify="left",
+        )
+        self._instructions.pack(anchor="w", padx=PAD, pady=(0, 16))
+
         self._confirm = ctk.CTkCheckBox(
             self._body,
             text=DISCLAIMER_TEXT,
@@ -138,14 +167,19 @@ class ZeroCellApp(ctk.CTk):
         )
         self._btn.pack(fill="x", padx=PAD)
 
-        self._instructions = c.make_label(
+        self._btn_restore = c.make_button(
             self._body,
-            self._heading("DATA SYNC CABLE · DEVICE POWERED ON · THEN PRESS RUN"),
-            color=t.muted,
-            font=self._font(t.body_font),
-            wraplength=WRAP_FULL,
+            self._heading(LABEL_RESTORE),
+            self._start_restore,
+            fg=t.panel_border,
+            hover=t.panel_border,
+            ink=t.ink,
+            radius=t.radius,
+            outline=True,
+            height=38,
+            font=self._font((t.body_font[0], t.body_font[1] - 1, "normal")),
         )
-        self._instructions.pack(anchor="w", padx=PAD, pady=(16, 0))
+        self._btn_restore.pack(fill="x", padx=PAD, pady=(8, 0))
 
     # -------------------------------------------------------------- state machine
 
@@ -159,14 +193,22 @@ class ZeroCellApp(ctk.CTk):
         t = THEME
         node = step if isinstance(step, Step) else Step[step]
         idx = list(Step).index(node) + 1
-        self._status.configure(text=f"{idx}/{len(Step)} {node}", text_color=t.accent)
+        text = "Restoring battery..." if node is Step.APPLYING and self._restore else str(node)
+        self._status.configure(text=f"{idx}/{len(Step)} {text}", text_color=t.accent)
         self._progress.set(0.08 + 0.08 * idx)
 
     def _start(self) -> None:
+        self._begin(restore=False)
+
+    def _start_restore(self) -> None:
+        self._begin(restore=True)
+
+    def _begin(self, *, restore: bool) -> None:
         if self._busy:
             return
         # ponytail: Tk is single-threaded so this flag alone closes the window
         # between two queued click events; no lock needed.
+        self._restore = restore
         self._busy = True
         if not self._confirm.get():
             self._busy = False
@@ -180,7 +222,10 @@ class ZeroCellApp(ctk.CTk):
             logger.info("disclaimer not acknowledged")
             return
         t = THEME
-        self._btn.configure(state="disabled", text=self._working_text)
+        self._btn.configure(
+            state="disabled", text=self._heading(LABEL_RESTORING if restore else LABEL_WORKING)
+        )
+        self._btn_restore.configure(state="disabled")
         self._confirm.configure(state="disabled")
         self._detail.configure(text="Please keep the device connected.", text_color=t.muted)
         self._status.configure(text="Starting...", text_color=t.ink)
@@ -201,6 +246,7 @@ class ZeroCellApp(ctk.CTk):
                     on_step=self._events.put,
                     on_detail=lambda text: self._events.put(("detail", text)),
                     cancel=self._cancel,
+                    restore=self._restore,
                 )
             self._events.put(("done", ok))
         except BypassCancelled:
@@ -257,6 +303,7 @@ class ZeroCellApp(ctk.CTk):
         t = THEME
         self._busy = False
         self._btn.configure(state="normal", text=self._start_text)
+        self._btn_restore.configure(state="normal")
         self._confirm.configure(state="normal")
         if cancelled:
             self._status.configure(text="Cancelled", text_color=t.muted)
@@ -265,17 +312,16 @@ class ZeroCellApp(ctk.CTk):
             logger.info("bypass cancelled by user")
         elif ok:
             # The API accepts the command; only the device can confirm success.
-            self._status.configure(text="Command accepted", text_color=t.success)
+            self._status.configure(
+                text="Battery restored" if self._restore else "Command accepted",
+                text_color=t.success,
+            )
             self._detail.configure(
-                text=(
-                    "Command accepted. Now verify on the device: unplug it, remove the "
-                    "battery, then plug into a wall charger. It should power on without "
-                    "the battery."
-                ),
+                text=DETAIL_RESTORED if self._restore else DETAIL_APPLIED,
                 text_color=t.success,
             )
             self._progress.set(1)
-            logger.info("bypass command accepted")
+            logger.info("bypass command accepted (restore=%s)", self._restore)
         else:
             self._status.configure(text="Bypass did not complete.", text_color=t.danger)
             self._detail.configure(
@@ -287,6 +333,7 @@ class ZeroCellApp(ctk.CTk):
         t = THEME
         self._busy = False
         self._btn.configure(state="normal", text=self._start_text)
+        self._btn_restore.configure(state="normal")
         self._confirm.configure(state="normal")
         self._progress.set(0)
         self._status.configure(text="Error", text_color=t.danger)
@@ -295,8 +342,8 @@ class ZeroCellApp(ctk.CTk):
 
     def _on_close(self) -> None:
         if self._busy and not messagebox.askyesno(
-            "Bypass in progress",
-            "A bypass is still running. Closing now may leave the device half-configured. "
+            "Operation in progress",
+            "An operation is still running. Closing now may leave the device half-configured. "
             "Close anyway?",
         ):
             return

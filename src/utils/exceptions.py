@@ -75,7 +75,15 @@ CableNotDataError = DeviceNotOnNetworkError
 
 class NoSerialPortError(BypassError):
     def __init__(
-        self, msg: str = "Device not found. Please ensure it is plugged in and turned on."
+        self,
+        msg: str = (
+            "Device not found. Ensure it is plugged in and powered on. If no "
+            "/dev/ttyUSB* port appears, the serial driver has not claimed it — run "
+            "'sudo modprobe option', then register the device: "
+            "'echo \"12d1 1442\" | sudo tee "
+            "/sys/bus/usb-serial/drivers/option1/new_id' "
+            "(the 4-digit id comes from 'lsusb | grep 12d1')."
+        ),
     ) -> None:
         super().__init__(msg)
 

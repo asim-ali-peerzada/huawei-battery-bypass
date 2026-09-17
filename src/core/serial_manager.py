@@ -27,7 +27,8 @@ _HUAWEI_VID = 0x12D1
 _PC_UI = "PC UI"
 _BAUD = 115200
 _TIMEOUT = 3
-_NV_WRITE = b"AT^NVWREX=50364,0,4,01 00 00 00\r\n"
+_NV_ENABLE = b"AT^NVWREX=50364,0,4,01 00 00 00\r\n"
+_NV_RESTORE = b"AT^NVWREX=50364,0,4,00 00 00 00\r\n"
 # The device signals an actual firmware lock explicitly; plain ERROR does not.
 _DATALOCK_TOKENS = (b"DATALOCK", b"DATALOCKED", b"+CME ERROR: 3")
 
@@ -90,6 +91,14 @@ class SerialManager:
         self.last_description = str(getattr(port, "description", ""))
 
     def write_battery_bypass(self, port: str) -> None:
+        """NV 50364 = 01… : run directly off DC (battery bypass on)."""
+        self._write_nv(port, _NV_ENABLE)
+
+    def write_battery_restore(self, port: str) -> None:
+        """NV 50364 = 00… : revert to normal battery operation."""
+        self._write_nv(port, _NV_RESTORE)
+
+    def _write_nv(self, port: str, payload: bytes) -> None:
         try:
             conn = _open(port)
         except serial.SerialException as exc:
@@ -97,7 +106,7 @@ class SerialManager:
         try:
             self._handshake(conn)
             logger.info("AT OK, sending NV write")
-            conn.write(_NV_WRITE)
+            conn.write(payload)
             self._read_ok(conn, at_phase=False, port=port)
             logger.info("NV write OK")
         finally:

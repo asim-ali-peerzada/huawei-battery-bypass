@@ -50,6 +50,7 @@ class FakeSerialManager:
         self.datalock = datalock
         self.not_supported = not_supported
         self.written = False
+        self.restored = False
         self.last_port = ""
         self.last_description = ""
 
@@ -83,6 +84,13 @@ class FakeSerialManager:
             raise DeviceNotSupportedError()
         self.written = True
 
+    def write_battery_restore(self, port: str) -> None:
+        if self.datalock:
+            from utils.exceptions import DatalockError
+
+            raise DatalockError(port)
+        self.restored = True
+
 
 class FakeController:
     """Stands in for BypassController in UI tests; records cancel usage."""
@@ -91,6 +99,7 @@ class FakeController:
         self.fail = fail
         self.cancel_check = cancel_check
         self.ran = 0
+        self.restore = False
         self.cancel: threading.Event | None = None
 
     def run(
@@ -98,8 +107,10 @@ class FakeController:
         on_step: Callable[[Any], None] | None = None,
         on_detail: Callable[[str], None] | None = None,
         cancel: threading.Event | None = None,
+        restore: bool = False,
     ) -> bool:
         self.ran += 1
+        self.restore = restore
         self.cancel = cancel
         if on_step:
             on_step("CONNECTING")

@@ -15,6 +15,10 @@ firmware parameter that stops the battery check over its serial port.
 The whole point is zero configuration: plug the device in, click **Start
 Battery Bypass**, and read the result on a clean dark-theme screen.
 
+Changed your mind? If the device is already in battery-less (direct DC) mode,
+click **Restore Battery** to write the parameter back to `00 00 00 00` and
+return it to normal battery operation.
+
 ## What it does
 
 1. Connects to the device's web interface (`http://192.168.8.1`) and switches
@@ -23,12 +27,26 @@ Battery Bypass**, and read the result on a clean dark-theme screen.
 3. Finds the Huawei serial port (vendor `0x12D1`, prefers the "PC UI"
    interface) and writes the battery bypass parameter over AT commands.
 
+**Restore Battery** runs the same flow but writes the zero payload
+(`AT^NVWREX=50364,0,4,00 00 00 00`) instead of the bypass value.
+
 ## Requirements
 
 - Python 3.11+
 - Linux user must be in the `dialout` group (else the OS blocks the serial
   port): `sudo usermod -aG dialout $USER`, then **log out and back in**.
 - A **Data Sync** USB cable. Charge-only cables will not connect to the router.
+- This computer must reach the device at `http://192.168.8.1` — join the
+  device's Wi-Fi, or use the network interface the USB cable exposes.
+
+## Before you start
+
+1. Insert the SIM card.
+2. Insert the battery.
+3. Power the device on.
+4. Connect this computer to the device's Wi-Fi.
+5. Connect the device to this computer with the Data Sync cable.
+6. Press **Start Battery Bypass**.
 
 ## Install & run from source
 
@@ -50,6 +68,16 @@ Ready-made binaries are attached to GitHub Releases:
 
 - **"Device not detected on network"** — you are almost certainly using a
   charge-only cable, or the router is not powered on.
+- **"Device not found" / no `/dev/ttyUSB*` port** — the kernel's `option`
+  driver has not claimed the device. Load it and register the USB id (find the
+  id with `lsusb | grep 12d1`):
+  ```bash
+  sudo modprobe option
+  echo "12d1 1442" | sudo tee /sys/bus/usb-serial/drivers/option1/new_id
+  ```
+  Then replug the device and retry. Note the AT port number (`ttyUSB1`,
+  `ttyUSB2`, …) can differ between machines; ZeroCell picks the "PC UI"
+  interface automatically.
 - **"ModemManager" / permission errors on Linux** — add your user to `dialout`
   and log out/in, or stop the service (temporarily):
   `sudo systemctl stop ModemManager`.
@@ -95,6 +123,13 @@ manual dispatch (Workflow runs → "Run workflow").
 
 If your device does not power on battery-less, it is simply not supported by
 this parameter; no damage is implied.
+
+## Reverting a bypass
+
+1. Start the device and connect it to a laptop over the Data Sync cable.
+2. Click **Restore Battery** and confirm the disclaimer.
+3. Reinsert the battery and power on normally to confirm it charges and runs
+   off the battery again.
 
 ## Changelog
 
